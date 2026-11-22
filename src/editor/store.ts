@@ -13,6 +13,8 @@ export interface Floating {
   y: number;
   /** Farbzuordnung Ausschnitt → aktuelles Raster */
   colorMap: Uint8Array;
+  /** true: aus der Auswahl angehoben (Quelle bereits geleert), false: eingefügt */
+  lifted: boolean;
 }
 
 export interface EditorState {
@@ -181,7 +183,13 @@ export class EditorActions {
   cancelStroke() {
     const s = this.state;
     if (!s.stroking) return;
-    this.set({ grid: s.committed, stroking: false, version: s.version + 1 });
+    this.set({
+      grid: s.committed,
+      stroking: false,
+      version: s.version + 1,
+      // Farben, die nur im verworfenen Entwurf existierten, nicht weiter verwenden
+      activeColor: Math.min(s.activeColor, s.committed.palette.length - 1),
+    });
   }
 
   /** Einmalige Änderung (z. B. Größe ändern, Spiegeln, Palette). */
@@ -276,11 +284,15 @@ export class EditorActions {
   }
 
   selectColor(index: number) {
-    this.set({ activeColor: index, paintTarget: 'color', ...(this.toolIsPaint() ? {} : { tool: 'pencil' as ToolId }) });
+    // Werkzeugwechsel über setTool, damit ein schwebender Ausschnitt vorher übernommen wird
+    if (!this.toolIsPaint()) this.setTool('pencil');
+    const max = this.state.committed.palette.length - 1;
+    this.set({ activeColor: Math.max(0, Math.min(max, index)), paintTarget: 'color' });
   }
 
   selectSymbol(code: number) {
-    this.set({ activeSymbol: code, paintTarget: 'symbol', ...(this.toolIsPaint() ? {} : { tool: 'pencil' as ToolId }) });
+    if (!this.toolIsPaint()) this.setTool('pencil');
+    this.set({ activeSymbol: code, paintTarget: 'symbol' });
   }
 
   private toolIsPaint(): boolean {
@@ -310,7 +322,8 @@ export class EditorActions {
         if (gx < 0 || gx >= draft.width) continue;
         const si = cy * f.clip.width + cx;
         const di = gy * draft.width + gx;
-        draft.colors[di] = f.colorMap[f.clip.colors[si]] ?? 0;
+        const c = f.colorMap[f.clip.colors[si]] ?? 0;
+        draft.colors[di] = c < draft.palette.length ? c : 0;
         draft.symbols[di] = f.clip.symbols[si];
       }
     }

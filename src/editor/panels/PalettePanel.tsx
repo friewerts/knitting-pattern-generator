@@ -39,8 +39,11 @@ export function ColorEditDialog({ index, onClose }: { index: number | null; onCl
             type="button"
             className="btn btn-ghost btn-sm"
             onClick={() => {
+              actions.commitFloating();
+              const active = actions.state.activeColor;
               actions.apply((g) => movePaletteColor(g, index, 0));
-              actions.store.setState({ activeColor: 0 });
+              // Pinsel behält seine Farbe, auch wenn sich die Buchstaben verschieben
+              actions.store.setState({ activeColor: active === index ? 0 : active < index ? active + 1 : active });
               onClose();
             }}
           >
@@ -75,9 +78,11 @@ export function ColorEditDialog({ index, onClose }: { index: number | null; onCl
               type="button"
               className="btn btn-danger"
               onClick={() => {
+                actions.commitFloating();
+                const active = actions.state.activeColor;
+                const rep = target > index ? target - 1 : target;
                 actions.apply((g) => removePaletteColor(g, index, target));
-                const s = actions.state;
-                actions.store.setState({ activeColor: Math.min(s.activeColor, s.committed.palette.length - 1) });
+                actions.store.setState({ activeColor: active === index ? rep : active > index ? active - 1 : active });
                 onClose();
               }}
             >
@@ -141,6 +146,8 @@ export function useAddColor() {
   const { actions } = useEditor();
   const t = useT();
   return () => {
+    // Schwebenden Ausschnitt zuerst übernehmen – er kann selbst Farben hinzufügen
+    actions.commitFloating();
     const g = actions.state.committed;
     if (g.palette.length >= MAX_PALETTE) {
       toast(t('palette.full', { n: MAX_PALETTE }));
@@ -202,7 +209,17 @@ export function PalettePanel() {
             type="button"
             className="btn btn-sm btn-ghost"
             title={t('palette.removeUnused')}
-            onClick={() => actions.apply((g) => removeUnusedColors(g))}
+            onClick={() => {
+              actions.commitFloating();
+              const g0 = actions.state.committed;
+              const active = actions.state.activeColor;
+              const used = new Uint8Array(g0.palette.length);
+              for (let i = 0; i < g0.colors.length; i++) used[g0.colors[i]] = 1;
+              let next = 0;
+              if (used[active]) for (let j = 0; j < active; j++) next += used[j];
+              actions.apply((g) => removeUnusedColors(g));
+              actions.store.setState({ activeColor: Math.min(next, actions.state.committed.palette.length - 1) });
+            }}
           >
             <EraserIcon size={15} />
             <span className="sr-only">{t('palette.removeUnused')}</span>

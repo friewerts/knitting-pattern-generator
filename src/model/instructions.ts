@@ -233,7 +233,7 @@ export function instructionsText(
     for (let i = 0; i < g.colors.length; i++) used.add(g.colors[i]);
     const colorLines = [...used]
       .sort((a, b) => a - b)
-      .map((c) => `${colorLetter(c)} = ${g.palette[c].name || g.palette[c].hex}`);
+      .map((c) => `${colorLetter(c)} = ${g.palette[c]?.name || g.palette[c]?.hex || '?'}`);
     lines.push((lang === 'de' ? 'Farben: ' : 'Colours: ') + colorLines.join(', '));
   }
   lines.push('');

@@ -181,7 +181,8 @@ export function deserializeDoc(raw: unknown): ChartDoc {
     updatedAt: num(o.updatedAt, now, 0, Number.MAX_SAFE_INTEGER),
     grid,
     settings: sanitizeSettings(o.settings),
-    progressRow: Math.round(num(o.progressRow, 0, 0, height)),
+    // height + 1 = „alle Reihen gestrickt“
+    progressRow: Math.round(num(o.progressRow, 0, 0, height + 1)),
     notes: typeof o.notes === 'string' ? o.notes.slice(0, 20000) : '',
   };
 }

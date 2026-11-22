@@ -47,7 +47,8 @@ type Cell = { x: number; y: number };
 type StrokeState =
   | { kind: 'paint'; last: Cell | null; erase: boolean; lastPlaced: Cell | null }
   | { kind: 'shape'; tool: 'line' | 'rect'; start: Cell; end: Cell }
-  | { kind: 'select'; start: Cell }
+  | { kind: 'select'; start: Cell; prev: Rect | null }
+  | { kind: 'pending-lift'; startCell: Cell; sel: Rect }
   | { kind: 'move-floating'; startCell: Cell; origin: Cell };
 
 export interface ControllerCallbacks {
@@ -108,6 +109,7 @@ export class ChartCanvasController {
     canvas.addEventListener('contextmenu', this.onContextMenu);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onBlur);
     if (typeof matchMedia !== 'undefined') {
       this.media = matchMedia('(prefers-color-scheme: dark)');
       this.media.addEventListener('change', this.onThemeChange);
@@ -130,6 +132,7 @@ export class ChartCanvasController {
     c.removeEventListener('contextmenu', this.onContextMenu);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.onBlur);
     this.media?.removeEventListener('change', this.onThemeChange);
   }
 
@@ -275,6 +278,9 @@ export class ChartCanvasController {
   }
 
   private onState(s: EditorState, prev: EditorState) {
+    const st = this.stroke;
+    if (st && (st.kind === 'paint' || st.kind === 'shape') && !s.stroking) this.stroke = null;
+    if (st && st.kind === 'move-floating' && !s.floating) this.stroke = null;
     if (s.grid.width !== prev.grid.width || s.grid.height !== prev.grid.height) {
       // Nach Größenänderung sichtbar halten
       this.clampPan();
@@ -562,12 +568,14 @@ export class ChartCanvasController {
     }
     if (this.pointers.size === 0) this.suppress = false;
     if (this.panState) {
+      const ps = this.panState;
       this.panState = null;
       this.canvas.style.cursor = '';
       if (this.tap && this.state.knitMode && performance.now() - this.tap.t < 600) {
-        const cell = this.cellAt(this.tap.x, this.tap.y);
+        // Versatz beim Aufsetzen verwenden – kleine Fingerbewegungen verschieben die Ansicht bereits
+        const cy = Math.floor((this.tap.y - ps.oy) / this.ch);
         const g = this.state.grid;
-        if (cell.y >= 0 && cell.y < g.height) this.actions.updateDoc({ progressRow: g.height - cell.y });
+        if (cy >= 0 && cy < g.height) this.actions.updateDoc({ progressRow: g.height - cy });
       }
       this.tap = null;
       return;
@@ -634,6 +642,12 @@ export class ChartCanvasController {
     }
   };
 
+  private onBlur = () => {
+    // keyup kommt nicht an, wenn das Fenster bei gedrückter Leertaste den Fokus verliert
+    this.spaceDown = false;
+    this.canvas.style.cursor = '';
+  };
+
   // ---------- Werkzeuge ----------
 
   private pick(cell: Cell, temporary: boolean) {
@@ -655,10 +669,11 @@ export class ChartCanvasController {
     const st = this.stroke;
     this.stroke = null;
     if (st.kind === 'select') {
-      this.actions.setSelection(null);
+      // vorherige Auswahl wiederherstellen
+      this.actions.setSelection(st.prev);
       return;
     }
-    if (st.kind === 'move-floating') return;
+    if (st.kind === 'move-floating' || st.kind === 'pending-lift') return;
     this.actions.cancelStroke();
   }
 
@@ -745,25 +760,13 @@ export class ChartCanvasController {
         }
         const sel = this.state.selection;
         if (sel && inRect(cell, sel)) {
-          // Auswahl anheben und verschieben
-          const clip = extractClip(this.state.committed, sel);
-          const draft = this.actions.beginStroke();
-          for (let y = sel.y; y < sel.y + sel.height; y++) {
-            for (let x = sel.x; x < sel.x + sel.width; x++) {
-              const i = y * draft.width + x;
-              draft.colors[i] = 0;
-              draft.symbols[i] = 0;
-            }
-          }
-          const map = new Uint8Array(clip.palette.length);
-          map.forEach((_, i) => (map[i] = i));
-          this.actions.setFloating({ clip, x: sel.x, y: sel.y, colorMap: map });
-          this.actions.setSelection(null);
-          this.stroke = { kind: 'move-floating', startCell: cell, origin: { x: sel.x, y: sel.y } };
+          // Angehoben wird erst, wenn der Zeiger wirklich bewegt wird
+          this.stroke = { kind: 'pending-lift', startCell: cell, sel };
           return;
         }
+        const prev = this.state.selection;
         this.actions.setSelection({ x: c.x, y: c.y, width: 1, height: 1 });
-        this.stroke = { kind: 'select', start: c };
+        this.stroke = { kind: 'select', start: c, prev };
         break;
       }
       default:
@@ -776,6 +779,18 @@ export class ChartCanvasController {
     if (!st) return;
     const s = this.state;
     const g = s.grid;
+    if ((st.kind === 'paint' || st.kind === 'shape') && !s.stroking) {
+      // Strich wurde inzwischen verworfen (z. B. Rückgängig) – nicht ins übernommene Raster zeichnen
+      this.stroke = null;
+      return;
+    }
+    if (st.kind === 'pending-lift') {
+      if (cell.x === st.startCell.x && cell.y === st.startCell.y) return;
+      this.liftSelection(st.sel);
+      this.stroke = { kind: 'move-floating', startCell: st.startCell, origin: { x: st.sel.x, y: st.sel.y } };
+      this.moveTool(cell, e);
+      return;
+    }
     if (st.kind === 'paint') {
       const symWidth = !st.erase && s.paintTarget === 'symbol' ? symbolPart(s.activeSymbol).symbol.width : 1;
       const last = st.last ?? cell;
@@ -803,11 +818,31 @@ export class ChartCanvasController {
     }
     if (st.kind === 'move-floating') {
       const f = s.floating;
-      if (!f) return;
+      if (!f) {
+        this.stroke = null;
+        return;
+      }
       const nx = st.origin.x + (cell.x - st.startCell.x);
       const ny = st.origin.y + (cell.y - st.startCell.y);
       if (nx !== f.x || ny !== f.y) this.actions.setFloating({ ...f, x: nx, y: ny });
     }
+  }
+
+  /** Auswahl als schwebenden Ausschnitt anheben (Quelle wird im Entwurf geleert). */
+  private liftSelection(sel: Rect) {
+    const clip = extractClip(this.state.committed, sel);
+    const draft = this.actions.beginStroke();
+    for (let y = sel.y; y < sel.y + sel.height; y++) {
+      for (let x = sel.x; x < sel.x + sel.width; x++) {
+        const i = y * draft.width + x;
+        draft.colors[i] = 0;
+        draft.symbols[i] = 0;
+      }
+    }
+    const map = new Uint8Array(clip.palette.length);
+    map.forEach((_, i) => (map[i] = i));
+    this.actions.setFloating({ clip, x: sel.x, y: sel.y, colorMap: map, lifted: true });
+    this.actions.setSelection(null);
   }
 
   private endTool(cell: Cell) {

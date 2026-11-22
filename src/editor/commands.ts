@@ -24,10 +24,22 @@ export function copySelection(actions: EditorActions): boolean {
   return true;
 }
 
+/** Schwebenden Ausschnitt verwerfen: angehobene Inhalte bleiben gelöscht, eingefügte verschwinden. */
+function discardFloating(actions: EditorActions): void {
+  const f = actions.state.floating;
+  if (!f) return;
+  if (f.lifted) {
+    actions.setFloating(null);
+    actions.commitStroke();
+  } else {
+    actions.cancelFloating();
+  }
+}
+
 export function clearSelection(actions: EditorActions): void {
   const s = actions.state;
   if (s.floating) {
-    actions.cancelFloating();
+    discardFloating(actions);
     return;
   }
   const sel = s.selection;
@@ -37,11 +49,8 @@ export function clearSelection(actions: EditorActions): void {
 
 export function cutSelection(actions: EditorActions): void {
   if (!copySelection(actions)) return;
-  const s = actions.state;
-  if (s.floating) {
-    // Angehobener Inhalt: einfach verwerfen (Quelle ist bereits geleert)
-    actions.setFloating(null);
-    actions.commitStroke();
+  if (actions.state.floating) {
+    discardFloating(actions);
     return;
   }
   clearSelection(actions);
@@ -57,7 +66,7 @@ export function pasteClipboard(actions: EditorActions, controller: ChartCanvasCo
   const map = mapClipColors(draft, clip);
   const pos = s.selection ? { x: s.selection.x, y: s.selection.y } : controller?.topLeftVisibleCell() ?? { x: 0, y: 0 };
   actions.setSelection(null);
-  actions.setFloating({ clip, x: pos.x, y: pos.y, colorMap: map });
+  actions.setFloating({ clip, x: pos.x, y: pos.y, colorMap: map, lifted: false });
   return true;
 }
 

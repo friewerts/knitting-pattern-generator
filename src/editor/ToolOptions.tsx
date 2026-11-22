@@ -115,7 +115,8 @@ export function ToolOptions() {
     );
   }
 
-  if (tool === 'hand' || tool === 'picker') return null;
+  // Füllen arbeitet nicht symmetrisch – daher keine Spiegel-Optionen anzeigen
+  if (tool === 'hand' || tool === 'picker' || tool === 'fill') return null;
 
   return (
     <div className="tool-options" role="toolbar" aria-label={t('editor.tools')}>

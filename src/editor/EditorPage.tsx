@@ -27,6 +27,8 @@ import {
   CircleHelp,
 } from 'lucide-react';
 import { getStore } from '../storage/db';
+import { flushPendingSaves } from '../storage/charts';
+import { repairSymbols } from '../model/grid';
 import { navigate } from '../router';
 import { useLang, useT, type TFunction } from '../i18n';
 import { toast } from '../state/app';
@@ -56,7 +58,10 @@ export default function EditorPage({ id }: { id: string }) {
   useEffect(() => {
     let cancelled = false;
     let stop: (() => void) | null = null;
+    let current: EditorActions | null = null;
     void (async () => {
+      // Erst laufende Speichervorgänge abschließen, sonst könnte ein veralteter Stand geladen werden
+      await flushPendingSaves();
       const store = await getStore();
       const doc = await store.get(id);
       if (cancelled) return;
@@ -64,13 +69,17 @@ export default function EditorPage({ id }: { id: string }) {
         setState({ status: 'missing' });
         return;
       }
+      repairSymbols(doc.grid);
       const es = createEditorStore(doc);
       const actions = new EditorActions(es);
+      current = actions;
       stop = startAutosave(actions);
       setState({ status: 'ready', ctx: { store: es, actions, controller: { current: null } } });
     })();
     return () => {
       cancelled = true;
+      // Noch nicht platzierten Ausschnitt übernehmen, damit nichts verloren geht
+      current?.commitFloating();
       stop?.();
     };
   }, [id]);
@@ -207,7 +216,17 @@ function EditorView() {
 
   return (
     <div className="editor">
-      <TopBar onExport={() => setExportOpen(true)} onSettings={() => setSettingsOpen(true)} onHelp={() => setHelpOpen(true)} />
+      <TopBar
+        onExport={() => {
+          actions.commitFloating();
+          setExportOpen(true);
+        }}
+        onSettings={() => {
+          actions.commitFloating();
+          setSettingsOpen(true);
+        }}
+        onHelp={() => setHelpOpen(true)}
+      />
       {!knitMode && <ToolRail />}
       <div className="canvas-wrap">
         <ChartCanvas />

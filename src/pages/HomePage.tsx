@@ -3,7 +3,7 @@ import { Download, FileUp, Grid3x3, ImagePlus, Info, MoreVertical, Pencil, Copy,
 import type { ChartMeta } from '../model/types';
 import { backupFile, parseChartFile, safeFileName, serializeDoc } from '../model/doc';
 import { duplicateDoc, getStore } from '../storage/db';
-import { saveDoc } from '../storage/charts';
+import { flushPendingSaves, saveDoc } from '../storage/charts';
 import { downloadJson, pickFile } from '../export/download';
 import { navigate } from '../router';
 import { formatDate, useLang, useT } from '../i18n';
@@ -38,6 +38,8 @@ export function HomePage() {
   const [deleteTarget, setDeleteTarget] = useState<ChartMeta | null>(null);
 
   const refresh = useCallback(async () => {
+    // Vom Editor ggf. noch laufende Speichervorgänge abwarten (aktuelle Namen und Vorschaubilder)
+    await flushPendingSaves();
     const store = await getStore();
     setStoreTemp(!store.persistent);
     setCharts(await store.list());
@@ -110,13 +112,16 @@ export function HomePage() {
       const docs = parseChartFile(await file.text());
       const store = await getStore();
       const existing = new Set((await store.list()).map((m) => m.id));
+      const savedIds: string[] = [];
       for (const d of docs) {
+        // Vorhandenes Muster nicht überschreiben, sondern als Kopie mit neuer ID anlegen
         const doc = existing.has(d.id) ? duplicateDoc(d, d.name) : d;
         await saveDoc(doc);
+        savedIds.push(doc.id);
       }
       toast(t('home.imported', { n: docs.length }));
       await refresh();
-      if (docs.length === 1) navigate(`/edit/${docs[0].id}`);
+      if (savedIds.length === 1) navigate(`/edit/${savedIds[0]}`);
     } catch {
       toast(t('home.importFailed'));
     }

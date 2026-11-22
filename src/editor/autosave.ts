@@ -33,8 +33,11 @@ export function startAutosave(actions: EditorActions): () => void {
     } finally {
       saving = false;
       if (pending) {
+        // Während des Speicherns angefordert (z. B. beim Verlassen der Seite): sofort nachspeichern
         pending = false;
-        schedule();
+        if (timer) clearTimeout(timer);
+        timer = null;
+        void run();
       }
     }
   };

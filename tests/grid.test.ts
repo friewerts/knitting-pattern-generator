@@ -161,3 +161,28 @@ describe('grid basics', () => {
     expect(colorLetter(26)).toBe('AA');
   });
 });
+
+describe('review regressions (grid)', () => {
+  it('maps only colours that the clip actually uses', () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({ hex: `#0${i}0${i}0${i}`, name: '' }));
+    const src = createGrid(2, 1, many);
+    src.colors.set([5, 5]);
+    const clip = extractClip(src, normRect(0, 0, 1, 0));
+    const target = createGrid(2, 1);
+    const before = target.palette.length;
+    const map = mapClipColors(target, clip);
+    expect(target.palette.length).toBe(before + 1);
+    expect(target.palette[map[5]].hex).toBe('#050505');
+  });
+
+  it('centre-anchored resize is reversible', () => {
+    const g = createGrid(4, 1);
+    g.colors.set([1, 2, 3, 1]);
+    const big = resizeGrid(g, 7, 1, 0, 0);
+    const back = resizeGrid(big, 4, 1, 0, 0);
+    expect(Array.from(back.colors)).toEqual([1, 2, 3, 1]);
+    const odd = createGrid(5, 1);
+    odd.colors.set([1, 2, 3, 2, 1]);
+    expect(Array.from(resizeGrid(resizeGrid(odd, 4, 1, 0, 0), 5, 1, 0, 0).colors).filter((c) => c === 3).length).toBe(1);
+  });
+});

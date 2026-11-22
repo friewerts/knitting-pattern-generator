@@ -54,8 +54,9 @@ export function stitchNumber(g: { width: number }, x: number): number {
  */
 export function resizeGrid(g: ChartGrid, width: number, height: number, anchorX: -1 | 0 | 1, anchorY: -1 | 0 | 1): ChartGrid {
   const out = createGrid(width, height, g.palette);
-  const dx = anchorX === -1 ? 0 : anchorX === 1 ? width - g.width : Math.floor((width - g.width) / 2);
-  const dy = anchorY === -1 ? 0 : anchorY === 1 ? height - g.height : Math.floor((height - g.height) / 2);
+  // trunc statt floor: Vergrößern und anschließendes Verkleinern stellt den Ausgangszustand wieder her
+  const dx = anchorX === -1 ? 0 : anchorX === 1 ? width - g.width : Math.trunc((width - g.width) / 2);
+  const dy = anchorY === -1 ? 0 : anchorY === 1 ? height - g.height : Math.trunc((height - g.height) / 2);
   for (let y = 0; y < g.height; y++) {
     const ny = y + dy;
     if (ny < 0 || ny >= height) continue;
@@ -275,7 +276,11 @@ export function flipClipVertical(c: Clip): Clip {
  */
 export function mapClipColors(g: ChartGrid, clip: Clip): Uint8Array {
   const map = new Uint8Array(Math.max(1, clip.palette.length));
+  // Nur Farben übernehmen, die im Ausschnitt tatsächlich vorkommen
+  const used = new Uint8Array(Math.max(1, clip.palette.length));
+  for (let i = 0; i < clip.colors.length; i++) used[clip.colors[i]] = 1;
   clip.palette.forEach((entry, i) => {
+    if (!used[i]) return;
     const hex = normalizeHex(entry.hex);
     let idx = g.palette.findIndex((p) => normalizeHex(p.hex) === hex);
     if (idx < 0) {

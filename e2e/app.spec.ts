@@ -82,6 +82,56 @@ test.describe('Editor', () => {
     await expect(page.locator('.instr-list li[data-row="1"]')).toContainText('[A: 1 re · B: 1 re] 5× (10 M)');
   });
 
+  test('Auswahl anklicken und löschen leert die Maschen', async ({ page }) => {
+    await createBlankChart(page, '10×10');
+    // Reihe 1 komplett mit Farbe B
+    const r0 = await cellPoint(page, 0, 9);
+    const r9 = await cellPoint(page, 9, 9);
+    await page.keyboard.press('l');
+    await page.mouse.move(r0.x, r0.y);
+    await page.mouse.down();
+    await page.mouse.move(r9.x, r9.y, { steps: 4 });
+    await page.mouse.up();
+    await page.getByRole('tab', { name: 'Anleitung' }).click();
+    const row1 = page.locator('.instr-list li[data-row="1"]');
+    await expect(row1).toContainText('B: 10 re');
+    // Auswahl über die rechten 4 Maschen, hineinklicken ohne zu ziehen, Entf
+    await page.keyboard.press('s');
+    const a = await cellPoint(page, 6, 9);
+    const b = await cellPoint(page, 9, 9);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 3 });
+    await page.mouse.up();
+    const inside = await cellPoint(page, 7, 9);
+    await page.mouse.click(inside.x, inside.y);
+    await page.keyboard.press('Delete');
+    await expect(row1).toContainText('A: 4 re · B: 6 re');
+  });
+
+  test('Farbwahl übernimmt einen eingefügten Ausschnitt', async ({ page }) => {
+    await createBlankChart(page, '10×10');
+    const p = await cellPoint(page, 9, 9);
+    await page.mouse.click(p.x, p.y);
+    await page.keyboard.press('s');
+    const a = await cellPoint(page, 8, 9);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(p.x, p.y, { steps: 3 });
+    await page.mouse.up();
+    await page.keyboard.press('Control+c');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+v');
+    await expect(page.getByRole('button', { name: 'Platzieren' })).toBeVisible();
+    // Farbe wählen → Ausschnitt wird platziert, Stift ist aktiv
+    await page.getByRole('button', { name: /^Farben C/ }).click();
+    await expect(page.getByRole('button', { name: 'Platzieren' })).toBeHidden();
+    const q = await cellPoint(page, 0, 0);
+    await page.mouse.click(q.x, q.y);
+    await page.getByRole('tab', { name: 'Anleitung' }).click();
+    await expect(page.locator('.instr-list li[data-row="10"]')).toContainText('C: 1');
+  });
+
   test('Strickmodus führt Reihe für Reihe', async ({ page }) => {
     await createBlankChart(page, '10×10');
     await page.getByRole('button', { name: 'Strickmodus' }).click();

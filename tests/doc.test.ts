@@ -60,3 +60,12 @@ describe('serialization', () => {
     expect(size.height).toBeCloseTo(10);
   });
 });
+
+describe('review regressions (doc)', () => {
+  it('keeps the finished knitting state on import', () => {
+    const doc = createDoc({ name: 'Fertig', width: 3, height: 4 });
+    doc.progressRow = 5;
+    const back = parseChartFile(JSON.stringify(serializeDoc(doc)))[0];
+    expect(back.progressRow).toBe(5);
+  });
+});
