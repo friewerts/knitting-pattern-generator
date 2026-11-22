@@ -539,8 +539,6 @@ export function convertPrepared(src: PreparedSource, p: ConvertParams, weightPow
     weights[i] = weightPower === 1 ? src.binCount[i] : Math.pow(src.binCount[i], weightPower);
   }
   const k = Math.max(2, Math.min(32, Math.round(p.colors)));
-  const centers = kmeansBins({ points, weights, count: nBins }, k, 1234);
-  const kk = centers.length;
   // Angepasste Mittelwerte je Masche
   const cells = gridW * gridH;
   const cellAdj = new Float32Array(cells * 3);
@@ -551,50 +549,76 @@ export function convertPrepared(src: PreparedSource, p: ConvertParams, weightPow
     cellAdj[c * 3 + 2] = b;
   }
   let indices: Uint8Array;
+  let centers: Lab[];
   if (p.dither) {
+    centers = kmeansBins({ points, weights, count: nBins }, k, 1234);
     indices = assignDithered(cellAdj, gridW, gridH, centers);
   } else {
-    const binToCenter = new Uint8Array(nBins);
-    for (let i = 0; i < nBins; i++) binToCenter[i] = nearest(points[i * 3], points[i * 3 + 1], points[i * 3 + 2], centers);
-    const votes = new Uint32Array(cells * kk);
-    for (let y = 0; y < h; y++) {
-      const rowBase = Math.min(gridH - 1, Math.floor((y * gridH) / h)) * gridW;
-      for (let x = 0; x < w; x++) {
-        const cell = rowBase + Math.min(gridW - 1, Math.floor((x * gridW) / w));
-        votes[cell * kk + binToCenter[src.binOf[y * w + x]]]++;
-      }
-    }
-    indices = new Uint8Array(cells);
-    for (let c = 0; c < cells; c++) {
-      let best = -1;
-      let bestVotes = -1;
-      let tie = false;
-      for (let j = 0; j < kk; j++) {
-        const v = votes[c * kk + j];
-        if (v > bestVotes) {
-          bestVotes = v;
-          best = j;
-          tie = false;
-        } else if (v === bestVotes) tie = true;
-      }
-      if (tie) {
-        // Gleichstand: die zum Mittelwert nächstgelegene der führenden Farben
-        let bestD = Infinity;
-        for (let j = 0; j < kk; j++) {
-          if (votes[c * kk + j] !== bestVotes) continue;
-          const cc = centers[j];
-          const dL = cellAdj[c * 3] - cc[0];
-          const da = cellAdj[c * 3 + 1] - cc[1];
-          const db = cellAdj[c * 3 + 2] - cc[2];
-          const d = dL * dL + da * da + db * db;
-          if (d < bestD) {
-            bestD = d;
-            best = j;
-          }
+    // Stufe 1: feine Farbreduktion über alle Pixel, dominante Feinfarbe je Masche (Mehrheitsentscheid)
+    const fine = kmeansBins({ points, weights, count: nBins }, Math.min(nBins, Math.max(24, k * 3)), 1234);
+    const kf = fine.length;
+    const binToFine = new Uint8Array(nBins);
+    for (let i = 0; i < nBins; i++) binToFine[i] = nearest(points[i * 3], points[i * 3 + 1], points[i * 3 + 2], fine);
+    const cellFine = new Uint8Array(cells);
+    const votes = new Uint32Array(gridW * kf);
+    let y = 0;
+    for (let cy = 0; cy < gridH; cy++) {
+      votes.fill(0);
+      // alle Pixelzeilen dieser Maschenreihe
+      for (; y < h && Math.min(gridH - 1, Math.floor((y * gridH) / h)) === cy; y++) {
+        for (let x = 0; x < w; x++) {
+          const cx = Math.min(gridW - 1, Math.floor((x * gridW) / w));
+          votes[cx * kf + binToFine[src.binOf[y * w + x]]]++;
         }
       }
-      indices[c] = best;
+      for (let cx = 0; cx < gridW; cx++) {
+        const c = cy * gridW + cx;
+        let best = 0;
+        let bestVotes = -1;
+        let bestD = Infinity;
+        for (let j = 0; j < kf; j++) {
+          const v = votes[cx * kf + j];
+          if (v < bestVotes || v === 0) continue;
+          const f = fine[j];
+          const dL = cellAdj[c * 3] - f[0];
+          const da = cellAdj[c * 3 + 1] - f[1];
+          const db = cellAdj[c * 3 + 2] - f[2];
+          const d = dL * dL + da * da + db * db;
+          // Gleichstand: die zum Mittelwert der Masche nächstgelegene Farbe
+          if (v > bestVotes || d < bestD) {
+            best = j;
+            bestVotes = v;
+            bestD = d;
+          }
+        }
+        cellFine[c] = best;
+      }
     }
+    // Stufe 2: finale Farben aus den dominanten Feinfarben der Maschen (jede Farbe bekommt Maschen)
+    const fineCells = new Float64Array(kf);
+    for (let c = 0; c < cells; c++) fineCells[cellFine[c]]++;
+    const used: number[] = [];
+    for (let j = 0; j < kf; j++) if (fineCells[j] > 0) used.push(j);
+    const fp = new Float64Array(used.length * 3);
+    const fw = new Float64Array(used.length);
+    used.forEach((j, i) => {
+      fp[i * 3] = fine[j][0];
+      fp[i * 3 + 1] = fine[j][1];
+      fp[i * 3 + 2] = fine[j][2];
+      fw[i] = weightPower === 1 ? fineCells[j] : Math.pow(fineCells[j], weightPower);
+    });
+    const finals = kmeansBins({ points: fp, weights: fw, count: used.length }, k, 4321);
+    const fineToFinal = new Uint8Array(kf);
+    used.forEach((j) => (fineToFinal[j] = nearest(fine[j][0], fine[j][1], fine[j][2], finals)));
+    // Farbe je finalem Cluster = häufigste echte Farbe darin (keine Mischfarben wie Oliv aus Grün + Rot)
+    const bestFine = new Int32Array(finals.length).fill(-1);
+    used.forEach((j) => {
+      const t = fineToFinal[j];
+      if (bestFine[t] < 0 || fineCells[j] > fineCells[bestFine[t]]) bestFine[t] = j;
+    });
+    centers = finals.map((f, t) => (bestFine[t] >= 0 ? ([...fine[bestFine[t]]] as Lab) : f));
+    indices = new Uint8Array(cells);
+    for (let c = 0; c < cells; c++) indices[c] = fineToFinal[cellFine[c]];
   }
   indices = despeckle(indices, gridW, gridH, Math.round(p.smoothing));
   const sorted = sortByFrequency(indices, centers);

@@ -186,8 +186,9 @@ export class EditorActions {
 
   /** Einmalige Änderung (z. B. Größe ändern, Spiegeln, Palette). */
   apply(fn: (g: ChartGrid) => ChartGrid | void): boolean {
-    const s = this.state;
-    if (s.stroking) this.cancelStroke();
+    // Schwebenden Ausschnitt zuerst übernehmen, sonst passen dessen Farbzuordnungen nicht mehr
+    if (this.state.floating) this.commitFloating();
+    if (this.state.stroking) this.cancelStroke();
     const base = this.state.committed;
     const draft = cloneGrid(base);
     const result = fn(draft) ?? draft;
@@ -227,8 +228,9 @@ export class EditorActions {
   }
 
   redo() {
+    if (this.state.floating) this.cancelFloating();
+    if (this.state.stroking) this.cancelStroke();
     const s = this.state;
-    if (s.stroking) this.cancelStroke();
     if (!s.future.length) return;
     const next = s.future[0];
     this.set({

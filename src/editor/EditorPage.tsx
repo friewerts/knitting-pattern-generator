@@ -24,10 +24,11 @@ import {
   AlertCircle,
   Loader2,
   Footprints,
+  CircleHelp,
 } from 'lucide-react';
 import { getStore } from '../storage/db';
 import { navigate } from '../router';
-import { useT, type TFunction } from '../i18n';
+import { useLang, useT, type TFunction } from '../i18n';
 import { toast } from '../state/app';
 import { createEditorStore, EditorActions, type SidePanel as Panel, type ToolId } from './store';
 import { EditorContext, useEd, useEditor, type EditorContextValue } from './context';
@@ -40,6 +41,7 @@ import { InstructionsPanel } from './panels/InstructionsPanel';
 import { KnitPanel } from './KnitPanel';
 import { ExportDialog } from './ExportDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { HelpDialog } from './HelpDialog';
 import { Menu, MenuItem } from '../ui/Menu';
 import { SymbolIcon } from '../ui/SymbolIcon';
 import { inkFor, colorLetter } from '../model/color';
@@ -111,7 +113,8 @@ function EditorView() {
   const [exportOpen, setExportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editColor, setEditColor] = useState<number | null>(null);
-  const dialogOpen = exportOpen || settingsOpen || editColor !== null;
+  const [helpOpen, setHelpOpen] = useState(false);
+  const dialogOpen = exportOpen || settingsOpen || helpOpen || editColor !== null;
 
   // Tastenkürzel
   useEffect(() => {
@@ -183,6 +186,10 @@ function EditorView() {
         clearSelection(actions);
         return;
       }
+      if (key === '?') {
+        setHelpOpen(true);
+        return;
+      }
       if (key === '+' || key === '=') return controller.current?.zoomBy(1.25);
       if (key === '-') return controller.current?.zoomBy(0.8);
       if (key === '0') return controller.current?.fit();
@@ -200,7 +207,7 @@ function EditorView() {
 
   return (
     <div className="editor">
-      <TopBar onExport={() => setExportOpen(true)} onSettings={() => setSettingsOpen(true)} />
+      <TopBar onExport={() => setExportOpen(true)} onSettings={() => setSettingsOpen(true)} onHelp={() => setHelpOpen(true)} />
       {!knitMode && <ToolRail />}
       <div className="canvas-wrap">
         <ChartCanvas />
@@ -212,6 +219,7 @@ function EditorView() {
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ColorEditDialog index={editColor} onClose={() => setEditColor(null)} />
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }
@@ -343,13 +351,15 @@ function ViewMenuItems({ close }: { close: () => void }) {
   );
 }
 
-function TopBar({ onExport, onSettings }: { onExport: () => void; onSettings: () => void }) {
+function TopBar({ onExport, onSettings, onHelp }: { onExport: () => void; onSettings: () => void; onHelp: () => void }) {
   const t = useT();
   const { actions, controller } = useEditor();
   const canUndo = useEd((s) => s.past.length > 0 || !!s.floating);
   const canRedo = useEd((s) => s.future.length > 0);
   const zoom = useEd((s) => s.zoom);
   const knitMode = useEd((s) => s.knitMode);
+  const lang = useLang((s) => s.lang);
+  const modKey = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : lang === 'de' ? 'Strg' : 'Ctrl';
 
   const setKnit = (on: boolean) => {
     const s = actions.state;
@@ -368,10 +378,10 @@ function TopBar({ onExport, onSettings }: { onExport: () => void; onSettings: ()
         <SaveIndicator />
       </span>
       <span className="topbar-spacer" />
-      <button type="button" className="icon-btn" onClick={() => actions.undo()} disabled={!canUndo} title={`${t('editor.undo')} (Strg+Z)`} aria-label={t('editor.undo')}>
+      <button type="button" className="icon-btn" onClick={() => actions.undo()} disabled={!canUndo} title={`${t('editor.undo')} (${modKey}+Z)`} aria-label={t('editor.undo')}>
         <Undo2 size={20} />
       </button>
-      <button type="button" className="icon-btn" onClick={() => actions.redo()} disabled={!canRedo} title={`${t('editor.redo')} (Strg+Y)`} aria-label={t('editor.redo')}>
+      <button type="button" className="icon-btn" onClick={() => actions.redo()} disabled={!canRedo} title={`${t('editor.redo')} (${modKey}+Y)`} aria-label={t('editor.redo')}>
         <Redo2 size={20} />
       </button>
       <span className="topbar-sep desktop-only" />
@@ -410,6 +420,9 @@ function TopBar({ onExport, onSettings }: { onExport: () => void; onSettings: ()
         <button type="button" className="icon-btn" onClick={onSettings} title={t('editor.settings')} aria-label={t('editor.settings')}>
           <Settings size={20} />
         </button>
+        <button type="button" className="icon-btn" onClick={onHelp} title={`${t('help.title')} (?)`} aria-label={t('help.title')}>
+          <CircleHelp size={20} />
+        </button>
       </span>
       <button type="button" className="icon-btn sheet-toggle" onClick={() => openSheet(knitMode ? 'instructions' : 'palette')} title={t('editor.panels')} aria-label={t('editor.panels')}>
         <PanelRight size={20} />
@@ -438,6 +451,9 @@ function TopBar({ onExport, onSettings }: { onExport: () => void; onSettings: ()
             </MenuItem>
             <MenuItem icon={<Maximize size={17} />} onClick={() => (close(), controller.current?.fit())}>
               {t('editor.fit')}
+            </MenuItem>
+            <MenuItem icon={<CircleHelp size={17} />} onClick={() => (close(), onHelp())}>
+              {t('help.title')}
             </MenuItem>
             <div className="menu-sep" />
             <div className="menu-label">{t('editor.view')}</div>

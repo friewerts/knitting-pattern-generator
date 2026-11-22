@@ -69,6 +69,12 @@ function applyOverrides(result: ConvertResult | null, overrides: Override[]): { 
   return out;
 }
 
+function formatShare(count: number, total: number): string {
+  if (!total || !count) return '0%';
+  const pct = (count / total) * 100;
+  return pct < 1 ? '<1%' : `${Math.round(pct)}%`;
+}
+
 function baseName(name: string): string {
   return name.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
 }
@@ -406,7 +412,7 @@ export function ImportDialog({ open, initialFile, onClose, onCreate }: Props) {
                         aria-label={t('import.editColor', { letter: colorLetter(i) })}
                       >
                         {colorLetter(i)}
-                        <span className="swatch-pct">{total ? Math.round((result.counts[i] / total) * 100) : 0}%</span>
+                        <span className="swatch-pct">{formatShare(result.counts[i], total)}</span>
                       </button>
                     ))}
                   </div>

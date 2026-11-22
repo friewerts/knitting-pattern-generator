@@ -325,6 +325,12 @@ export class ChartCanvasController {
     ctx.fillRect(0, 0, this.cssW, this.cssH);
     if (!this.cssW || !this.cssH) return;
     const vp = this.viewport();
+    // Ansichtsdaten am Element (für automatisierte Tests und Hilfsmittel)
+    const ds = this.canvas.dataset;
+    ds.ox = String(Math.round(vp.ox * 100) / 100);
+    ds.oy = String(Math.round(vp.oy * 100) / 100);
+    ds.cw = String(Math.round(vp.cw * 1000) / 1000);
+    ds.ch = String(Math.round(vp.ch * 1000) / 1000);
     if (s.version !== this.bitmapVersion || !this.bitmap) {
       this.bitmap = buildCellBitmap(g, this.bitmap ?? undefined);
       this.bitmapVersion = s.version;
