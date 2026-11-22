@@ -30,7 +30,9 @@ jobs:
       - name: Build
         run: npx vite build
         env:
-          BASE_PATH: /${{ github.event.repository.name }}/
+          # Eigene Domain (strickmuster.fredie.io) → App liegt im Wurzelpfad.
+          # Ohne eigene Domain die Repository-Variable BASE_PATH auf /<repo-name>/ setzen.
+          BASE_PATH: ${{ vars.BASE_PATH || '/' }}
       - uses: actions/upload-pages-artifact@v5
         if: github.event_name != 'pull_request'
         with:

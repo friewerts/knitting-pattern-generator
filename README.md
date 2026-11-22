@@ -4,6 +4,8 @@ Eine Progressive Web App, mit der sich Strickmuster (Strickschriften) einfach er
 im Stil gängiger Chart-Editoren: Kästchenraster mit Reihen- und Maschennummern, Farben, Strickschrift-Symbolen,
 Legende und schriftlicher Anleitung. Bilder lassen sich automatisch auf ein konfigurierbares Maschenraster übertragen.
 
+**Live:** https://strickmuster.fredie.io
+
 Die App läuft **komplett im Browser**, braucht **kein Backend und kein Konto** und funktioniert nach dem ersten Aufruf auch **offline**.
 Muster werden lokal im Browser (IndexedDB) gespeichert und können als Datei gesichert und weitergegeben werden.
 
@@ -89,14 +91,29 @@ tests/          Unit-Tests
 e2e/            Playwright-Tests
 ```
 
-## Veröffentlichen
+## Veröffentlichen (GitHub Pages, strickmuster.fredie.io)
 
-Die App ist eine rein statische Website (`dist/`) und kann auf jedem Webspace mit HTTPS liegen.
-Wird sie unter einem Unterpfad veröffentlicht, beim Build `BASE_PATH` setzen, z. B. `BASE_PATH=/strickmuster/ npm run build`.
+Die App ist eine rein statische Website (`dist/`). Der Workflow `.github/workflows/deploy.yml` prüft bei jedem Push auf
+`main` Typen und Tests, baut die App und veröffentlicht sie auf GitHub Pages. Pull Requests werden nur gebaut und getestet.
 
-Für **GitHub Pages** liegt ein Workflow bei (`.github/workflows/deploy.yml`): Bei jedem Push auf `main` werden Typen
-und Tests geprüft, die App gebaut und veröffentlicht. Einmalig in den Repository-Einstellungen unter
-*Settings → Pages → Build and deployment → Source* „GitHub Actions“ auswählen.
+Einmalige Einrichtung für die Domain **strickmuster.fredie.io**:
+
+1. *(Empfohlen, gegen Domain-Übernahme)* `fredie.io` in den GitHub-Kontoeinstellungen unter
+   *Settings → Pages → Add a domain* verifizieren (TXT-Eintrag beim DNS-Anbieter).
+2. Beim DNS-Anbieter von `fredie.io` einen **CNAME**-Eintrag anlegen:
+   `strickmuster` → `friewerts.github.io` (ohne Repository-Namen). Keine Wildcard-Einträge verwenden.
+3. Im Repository unter *Settings → Pages*:
+   - *Build and deployment → Source*: **GitHub Actions**
+   - *Custom domain*: `strickmuster.fredie.io` eintragen und speichern
+   - sobald verfügbar (kann bis zu 24 h dauern) **Enforce HTTPS** aktivieren
+4. Änderungen auf `main` bringen – der Workflow veröffentlicht automatisch.
+
+Eine `CNAME`-Datei ist bei Veröffentlichung per GitHub Actions nicht nötig (sie würde ignoriert); die Domain wird
+ausschließlich in den Pages-Einstellungen hinterlegt.
+
+Soll die App ohne eigene Domain unter `https://<user>.github.io/<repo>/` laufen, im Repository die Variable
+`BASE_PATH` (*Settings → Secrets and variables → Actions → Variables*) auf `/<repo>/` setzen. Lokal entsprechend:
+`BASE_PATH=/<repo>/ npm run build`. Jeder andere Webspace mit HTTPS funktioniert ebenso.
 
 ## Datenschutz
 
