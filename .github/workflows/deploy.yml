@@ -30,7 +30,7 @@ jobs:
       - name: Build
         run: npx vite build
         env:
-          # Eigene Domain (strickmuster.fredie.io) → App liegt im Wurzelpfad.
+          # Eigene Domain (maschenwerk.fredie.io) → App liegt im Wurzelpfad.
           # Ohne eigene Domain die Repository-Variable BASE_PATH auf /<repo-name>/ setzen.
           BASE_PATH: ${{ vars.BASE_PATH || '/' }}
       - uses: actions/upload-pages-artifact@v5

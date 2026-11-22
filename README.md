@@ -4,7 +4,7 @@ Eine Progressive Web App, mit der sich Strickmuster (Strickschriften) einfach er
 im Stil gängiger Chart-Editoren: Kästchenraster mit Reihen- und Maschennummern, Farben, Strickschrift-Symbolen,
 Legende und schriftlicher Anleitung. Bilder lassen sich automatisch auf ein konfigurierbares Maschenraster übertragen.
 
-**Live:** https://strickmuster.fredie.io
+**Live:** https://maschenwerk.fredie.io
 
 Die App läuft **komplett im Browser**, braucht **kein Backend und kein Konto** und funktioniert nach dem ersten Aufruf auch **offline**.
 Muster werden lokal im Browser (IndexedDB) gespeichert und können als Datei gesichert und weitergegeben werden.
@@ -91,20 +91,20 @@ tests/          Unit-Tests
 e2e/            Playwright-Tests
 ```
 
-## Veröffentlichen (GitHub Pages, strickmuster.fredie.io)
+## Veröffentlichen (GitHub Pages, maschenwerk.fredie.io)
 
 Die App ist eine rein statische Website (`dist/`). Der Workflow `.github/workflows/deploy.yml` prüft bei jedem Push auf
 `main` Typen und Tests, baut die App und veröffentlicht sie auf GitHub Pages. Pull Requests werden nur gebaut und getestet.
 
-Einmalige Einrichtung für die Domain **strickmuster.fredie.io**:
+Einmalige Einrichtung für die Domain **maschenwerk.fredie.io**:
 
 1. *(Empfohlen, gegen Domain-Übernahme)* `fredie.io` in den GitHub-Kontoeinstellungen unter
    *Settings → Pages → Add a domain* verifizieren (TXT-Eintrag beim DNS-Anbieter).
 2. Beim DNS-Anbieter von `fredie.io` einen **CNAME**-Eintrag anlegen:
-   `strickmuster` → `friewerts.github.io` (ohne Repository-Namen). Keine Wildcard-Einträge verwenden.
+   `maschenwerk` → `friewerts.github.io` (ohne Repository-Namen). Keine Wildcard-Einträge verwenden.
 3. Im Repository unter *Settings → Pages*:
    - *Build and deployment → Source*: **GitHub Actions**
-   - *Custom domain*: `strickmuster.fredie.io` eintragen und speichern
+   - *Custom domain*: `maschenwerk.fredie.io` eintragen und speichern
    - sobald verfügbar (kann bis zu 24 h dauern) **Enforce HTTPS** aktivieren
 4. Änderungen auf `main` bringen – der Workflow veröffentlicht automatisch.
 
